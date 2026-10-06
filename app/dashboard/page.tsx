@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import TaskComments from "@/components/TaskComments";
 import type { Task } from "@/lib/types";
 
 export default function Dashboard() {
@@ -13,6 +14,7 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [paid, setPaid] = useState(0);
   const [msg, setMsg] = useState("");
+  const [commentTask, setCommentTask] = useState<Task | null>(null);
   const [submitId, setSubmitId] = useState<string | null>(null);
   const [subUrl, setSubUrl] = useState("");
   const [subNotes, setSubNotes] = useState("");
@@ -62,6 +64,10 @@ export default function Dashboard() {
     e.preventDefault();
     if (!submitId) return;
     await supabase.rpc("submit_task", { p_task_id: submitId, p_url: subUrl, p_notes: subNotes });
+    await supabase.from("task_comments").insert({
+      task_id: submitId, author_id: uid,
+      body: "📎 Submitted: " + subUrl + (subNotes ? " — " + subNotes : ""),
+    });
     setSubmitId(null);
     setMsg("✅ Work submitted. The admin will review it.");
     load();
@@ -180,6 +186,10 @@ export default function Dashboard() {
                     Submit work
                   </button>
                 )}
+                <button onClick={() => setCommentTask(t)}
+                  className="rounded-full border border-gray-300 px-4 py-1 text-sm hover:border-[#0000FF] hover:text-[#0000FF]">
+                  💬 Comments
+                </button>
                 {t.status === "rejected" && t.admin_feedback && (
                   <p className="w-full text-sm text-red-600">Feedback: {t.admin_feedback}</p>
                 )}
@@ -209,6 +219,10 @@ export default function Dashboard() {
             </div>
           </form>
         </div>
+      )}
+      {commentTask && (
+        <TaskComments taskId={commentTask.id} taskTitle={commentTask.title}
+          myId={uid} otherLabel="Admin" onClose={() => setCommentTask(null)} />
       )}
     </main>
   );

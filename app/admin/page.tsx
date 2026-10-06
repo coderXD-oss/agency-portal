@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import TaskComments from "@/components/TaskComments";
 import { ROLES } from "@/lib/types";
 import type { Profile, Task } from "@/lib/types";
 
@@ -17,6 +18,8 @@ export default function Admin() {
   const [emps, setEmps] = useState<Profile[]>([]);
   const [payouts, setPayouts] = useState<{ employee_id: string; amount: number }[]>([]);
   const [f, setF] = useState(empty);
+  const [adminId, setAdminId] = useState("");
+  const [commentTask, setCommentTask] = useState<Task | null>(null);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
   const [confirmBox, setConfirmBox] = useState<{ text: string; action: () => Promise<void> } | null>(null);
@@ -35,6 +38,7 @@ export default function Admin() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.replace("/login");
+      setAdminId(user.id);
       const { data: p } = await supabase
         .from("profiles").select("is_admin").eq("id", user.id).single();
       if (!p?.is_admin) return router.replace("/");
@@ -71,6 +75,7 @@ export default function Admin() {
       return;
     }
     await supabase.from("tasks").update({ status: "approved", admin_feedback: null }).eq("id", id);
+    await supabase.from("task_comments").insert({ task_id: id, author_id: adminId, body: "✅ Approved" });
     load();
   }
   async function confirmReject(e: FormEvent) {
@@ -78,6 +83,9 @@ export default function Admin() {
     if (!rejectId) return;
     await supabase.from("tasks")
       .update({ status: "rejected", admin_feedback: feedback }).eq("id", rejectId);
+    await supabase.from("task_comments").insert({
+      task_id: rejectId, author_id: adminId, body: "❌ Rejected: " + feedback,
+    });
     setRejectId(null);
     load();
   }
@@ -190,6 +198,10 @@ export default function Admin() {
                   className="rounded-full bg-green-600 px-4 py-1 text-white hover:bg-green-700">Approve</button>
                 <button onClick={() => review(t.id, false)}
                   className="rounded-full bg-red-600 px-4 py-1 text-white hover:bg-red-700">Reject</button>
+                <button onClick={() => setCommentTask(t)}
+                  className="rounded-full border border-gray-300 px-4 py-1 hover:border-[#0000FF] hover:text-[#0000FF]">
+                  💬 Comments
+                </button>
               </div>
             </div>
           ))}
@@ -214,7 +226,12 @@ export default function Admin() {
                     <td className="font-medium uppercase text-[#0000FF]">{t.status.replace("_", " ")}</td>
                     <td>{name(t.assigned_to)}</td>
                     <td>{t.deadline ? new Date(t.deadline).toLocaleDateString() : "—"}</td>
-                    <td><button className="pr-3 text-red-600" onClick={() => removeTask(t.id)}>Delete</button></td>
+                    <td className="whitespace-nowrap pr-3">
+                      {t.assigned_to && (
+                        <button className="mr-3 text-[#0000FF]" onClick={() => setCommentTask(t)}>Comments</button>
+                      )}
+                      <button className="text-red-600" onClick={() => removeTask(t.id)}>Delete</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -303,6 +320,11 @@ export default function Admin() {
             </div>
           </div>
         </div>
+      )}
+      {commentTask && (
+        <TaskComments taskId={commentTask.id} taskTitle={commentTask.title}
+          myId={adminId} otherLabel={name(commentTask.assigned_to)}
+          onClose={() => setCommentTask(null)} />
       )}
     </main>
   );
