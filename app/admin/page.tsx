@@ -56,16 +56,35 @@ export default function Admin() {
     e.preventDefault();
     const direct = f.mode === "direct";
     if (direct && !f.assignee) return setNotice("Choose an employee");
-    const { error } = await supabase.from("tasks").insert({
+    const { data: created, error } = await supabase.from("tasks").insert({
       title: f.title, description: f.description, requirements: f.requirements,
       price: Number(f.price), deadline: f.deadline || null,
       required_role: f.required_role || null, mode: f.mode,
       assigned_to: direct ? f.assignee : null,
       status: direct ? "taken" : "open",
-    });
+    }).select("id").single();
     if (error) return setNotice(error.message);
-    setF(empty); setNotice("");
+    setF(empty);
+    setNotice("Task published. Sending email alerts…");
     load();
+
+    // The task is already live. If the email fails, nothing is lost.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session || !created) return;
+    fetch("/api/notify-task", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ taskId: created.id }),
+    })
+      .then((r) => r.json())
+      .then((r) =>
+        setNotice(
+          r.error
+            ? `Task published, but the emails failed: ${r.error}`
+            : `Task published. Email sent to ${r.sent} employee(s).`
+        )
+      )
+      .catch(() => setNotice("Task published, but the email alert failed."));
   }
 
   async function review(id: string, approve: boolean) {

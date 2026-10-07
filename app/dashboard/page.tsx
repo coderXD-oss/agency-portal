@@ -199,27 +199,6 @@ export default function Dashboard() {
         </section>
       </div>
 
-      {submitId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <form onSubmit={confirmSubmit} className="w-full max-w-md space-y-3 rounded-3xl bg-white p-6 shadow-2xl">
-            <h3 className="text-lg font-bold">Submit your work</h3>
-            <input
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 outline-none focus:border-[#0000FF]"
-              placeholder="Link (Google Drive, Frame.io, etc.)"
-              type="url" required value={subUrl}
-              onChange={(e) => setSubUrl(e.target.value)} />
-            <textarea
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 outline-none focus:border-[#0000FF]"
-              placeholder="Notes for the admin (optional)"
-              value={subNotes} onChange={(e) => setSubNotes(e.target.value)} />
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setSubmitId(null)}
-                className="rounded-full border border-black px-4 py-1.5">Cancel</button>
-              <button className="rounded-full bg-[#0000FF] px-5 py-1.5 text-white hover:bg-black">Submit</button>
-            </div>
-          </form>
-        </div>
-      )}
       {commentTask && (
         <TaskComments taskId={commentTask.id} taskTitle={commentTask.title}
           myId={uid} otherLabel="Admin" onClose={() => setCommentTask(null)} />
