@@ -1,3 +1,6 @@
 {
-  "crons": [{ "path": "/api/cleanup-files", "schedule": "0 20 * * *" }]
+  "crons": [
+    { "path": "/api/cleanup-files", "schedule": "0 20 * * *" },
+    { "path": "/api/remind-deadlines", "schedule": "30 2 * * *" }
+  ]
 }

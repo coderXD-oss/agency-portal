@@ -33,7 +33,10 @@ export default function Login() {
     "w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-black placeholder-gray-400 outline-none transition focus:border-[#0000FF] focus:ring-4 focus:ring-[#0000FF]/15";
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-black p-4">
+    <main
+      className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat p-4"
+      style={{ backgroundImage: "url('/login-gradient-bg.png')" }}
+    >
       <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl md:grid-cols-2">
         {/* Left brand panel */}
         <section className="relative hidden flex-col justify-between bg-[#0000FF] p-10 text-white md:flex">

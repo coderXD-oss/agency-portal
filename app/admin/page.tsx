@@ -14,6 +14,10 @@ const empty = {
   deadline: "", required_role: "", mode: "open", assignee: "",
 };
 
+function errorMessage(err: unknown) {
+  return err instanceof Error ? err.message : "An unexpected error occurred.";
+}
+
 export default function Admin() {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -26,6 +30,7 @@ export default function Admin() {
   const [feedback, setFeedback] = useState("");
   const [confirmBox, setConfirmBox] = useState<{ text: string; action: () => Promise<void> } | null>(null);
   const [notice, setNotice] = useState("");
+  const [toast, setToast] = useState("");
 
   const load = useCallback(async () => {
     const t = await supabase.from("tasks").select("*").order("created_at", { ascending: false });
@@ -89,26 +94,66 @@ export default function Admin() {
       .catch(() => setNotice("Task published, but the email alert failed."));
   }
 
+  function flash(m: string) {
+    setToast(m);
+    setTimeout(() => setToast(""), 5000);
+  }
+
+  async function notify(body: { type: "approved" | "rejected" | "paid"; taskId?: string; payoutId?: string }) {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      flash(`Saved, but the email failed: ${error.message}`);
+      return;
+    }
+    if (!session) {
+      flash("Saved, but the email failed: not logged in.");
+      return;
+    }
+
+    fetch("/api/notify-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+    })
+      .then(async (r) => {
+        const result = await r.json();
+        if (!r.ok) throw new Error(result.error ?? "Could not send the email.");
+        return result;
+      })
+      .then((r) => flash(r.error ? `Saved, but the email failed: ${r.error}` : "Saved. The employee was emailed."))
+      .catch((err: unknown) => flash(`Saved, but the email failed: ${errorMessage(err)}`));
+  }
+
   async function review(id: string, approve: boolean) {
     if (!approve) {
       setFeedback("");
       setRejectId(id);
       return;
     }
-    await supabase.from("tasks").update({ status: "approved", admin_feedback: null }).eq("id", id);
-    await supabase.from("task_comments").insert({ task_id: id, author_id: adminId, body: "✅ Approved" });
+    const { error } = await supabase.from("tasks").update({
+      status: "approved", admin_feedback: null, approved_at: new Date().toISOString(),
+    }).eq("id", id);
+    if (error) return flash(`Could not approve the task: ${error.message}`);
+    const { error: commentError } = await supabase.from("task_comments")
+      .insert({ task_id: id, author_id: adminId, body: "✅ Approved" });
+    if (commentError) flash(`Task approved, but the comment failed: ${commentError.message}`);
     load();
+    notify({ type: "approved", taskId: id });
   }
   async function confirmReject(e: FormEvent) {
     e.preventDefault();
     if (!rejectId) return;
-    await supabase.from("tasks")
-      .update({ status: "rejected", admin_feedback: feedback }).eq("id", rejectId);
-    await supabase.from("task_comments").insert({
-      task_id: rejectId, author_id: adminId, body: "❌ Rejected: " + feedback,
+    const id = rejectId;
+    const { error: updateError } = await supabase.from("tasks")
+      .update({ status: "rejected", admin_feedback: feedback }).eq("id", id);
+    if (updateError) return flash(`Could not reject the task: ${updateError.message}`);
+    const { error: commentError } = await supabase.from("task_comments").insert({
+      task_id: id, author_id: adminId, body: "❌ Rejected: " + feedback,
     });
+    if (commentError) flash(`Task rejected, but the comment failed: ${commentError.message}`);
     setRejectId(null);
     load();
+    notify({ type: "rejected", taskId: id });
   }
 
   async function updateEmp(id: string, patch: Partial<Profile>) {
@@ -122,8 +167,14 @@ export default function Admin() {
     setConfirmBox({
       text: `Record a payout of LKR ${amount.toLocaleString()}?`,
       action: async () => {
-        await supabase.from("payouts").insert({ employee_id: id, amount });
+        const { data: payout, error } = await supabase
+          .from("payouts").insert({ employee_id: id, amount }).select("id").single();
+        if (error) {
+          flash(`Could not record the payout: ${error.message}`);
+          return;
+        }
         load();
+        if (payout) notify({ type: "paid", payoutId: payout.id });
       },
     });
   }
@@ -351,6 +402,11 @@ export default function Admin() {
         <TaskComments taskId={commentTask.id} taskTitle={commentTask.title}
           myId={adminId} otherLabel={name(commentTask.assigned_to)}
           onClose={() => setCommentTask(null)} />
+      )}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-2xl bg-black px-5 py-3 text-sm text-white shadow-lg">
+          {toast}
+        </div>
       )}
     </main>
   );
