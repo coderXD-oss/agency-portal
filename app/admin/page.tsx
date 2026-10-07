@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import TaskComments from "@/components/TaskComments";
+import SubmissionFiles from "@/components/SubmissionFiles";
 import { ROLES } from "@/lib/types";
 import type { Profile, Task } from "@/lib/types";
 
@@ -203,12 +204,15 @@ export default function Admin() {
             <div key={t.id} className={`${card} mb-3`}>
               <b>{t.title}</b> by {name(t.assigned_to)},{" "}
               <span className="font-bold text-[#0000FF]">LKR {Number(t.price).toLocaleString()}</span>
-              <p className="text-sm">
-                Work:{" "}
-                <a className="text-[#0000FF] underline" href={t.submission_url ?? "#"} target="_blank">
-                  {t.submission_url}
-                </a>
-              </p>
+              {t.submission_url && (
+                <p className="text-sm">
+                  Work:{" "}
+                  <a className="text-[#0000FF] underline" href={t.submission_url} target="_blank">
+                    {t.submission_url}
+                  </a>
+                </p>
+              )}
+              <SubmissionFiles taskId={t.id} />
               {t.submission_notes && (
                 <p className="text-sm text-gray-600">Notes: {t.submission_notes}</p>
               )}

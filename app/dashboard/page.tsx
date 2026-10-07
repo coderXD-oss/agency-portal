@@ -18,6 +18,9 @@ export default function Dashboard() {
   const [submitId, setSubmitId] = useState<string | null>(null);
   const [subUrl, setSubUrl] = useState("");
   const [subNotes, setSubNotes] = useState("");
+  const [subFiles, setSubFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [subErr, setSubErr] = useState("");
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -58,17 +61,61 @@ export default function Dashboard() {
   function submitWork(id: string) {
     setSubUrl("");
     setSubNotes("");
+    setSubFiles([]);
+    setSubErr("");
     setSubmitId(id);
   }
   async function confirmSubmit(e: FormEvent) {
     e.preventDefault();
     if (!submitId) return;
-    await supabase.rpc("submit_task", { p_task_id: submitId, p_url: subUrl, p_notes: subNotes });
+
+    if (!subUrl.trim() && subFiles.length === 0)
+      return setSubErr("Add a link or attach at least one file.");
+    if (subFiles.some((f) => f.size > 50 * 1024 * 1024))
+      return setSubErr("Each file must be under 50 MB. For bigger files, use a link instead.");
+
+    setUploading(true);
+    setSubErr("");
+
+    const saved: { path: string; name: string; size: number }[] = [];
+    for (const file of subFiles) {
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${submitId}/${Date.now()}-${safe}`;
+      const { error } = await supabase.storage.from("submissions").upload(path, file);
+      if (error) {
+        setUploading(false);
+        return setSubErr(`Could not upload ${file.name}: ${error.message}`);
+      }
+      saved.push({ path, name: file.name, size: file.size });
+    }
+
+    for (const s of saved) {
+      const { error } = await supabase.rpc("add_task_file", {
+        p_task_id: submitId, p_path: s.path, p_name: s.name, p_size: s.size,
+      });
+      if (error) {
+        setUploading(false);
+        return setSubErr(error.message);
+      }
+    }
+
+    const { error: subError } = await supabase.rpc("submit_task", {
+      p_task_id: submitId, p_url: subUrl.trim(), p_notes: subNotes,
+    });
+    if (subError) {
+      setUploading(false);
+      return setSubErr(subError.message);
+    }
+
+    const fileNote = saved.length ? ` (${saved.length} file${saved.length > 1 ? "s" : ""} attached)` : "";
     await supabase.from("task_comments").insert({
       task_id: submitId, author_id: uid,
-      body: "📎 Submitted: " + subUrl + (subNotes ? " — " + subNotes : ""),
+      body: "📎 Submitted: " + (subUrl.trim() || "files only") + fileNote + (subNotes ? " — " + subNotes : ""),
     });
+
+    setUploading(false);
     setSubmitId(null);
+    setSubFiles([]);
     setMsg("✅ Work submitted. The admin will review it.");
     load();
   }
@@ -112,32 +159,40 @@ export default function Dashboard() {
         {msg && <p className="rounded-xl bg-blue-50 p-3 text-[#0000FF]">{msg}</p>}
 
         {submitId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <form onSubmit={confirmSubmit} className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-              <h3 className="text-xl font-bold text-black">Submit your work</h3>
-              <div className="mt-4 space-y-3">
-                <input
-                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-black outline-none focus:border-[#0000FF] focus:ring-2 focus:ring-[#0000FF]/20"
-                  type="url"
-                  placeholder="https://..."
-                  value={subUrl}
-                  onChange={(e) => setSubUrl(e.target.value)}
-                  required
-                />
-                <textarea
-                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-black outline-none focus:border-[#0000FF] focus:ring-2 focus:ring-[#0000FF]/20"
-                  placeholder="Notes for the admin (optional)"
-                  value={subNotes}
-                  onChange={(e) => setSubNotes(e.target.value)}
-                  rows={4}
-                />
-              </div>
-              <div className="mt-5 flex justify-end gap-2">
-                <button type="button" className="rounded-full border border-black px-4 py-2 text-sm hover:bg-black hover:text-white" onClick={() => setSubmitId(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="rounded-full bg-[#0000FF] px-4 py-2 text-sm font-semibold text-white hover:bg-black">
-                  Submit work
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <form onSubmit={confirmSubmit} className="w-full max-w-md space-y-3 rounded-3xl bg-white p-6 text-black shadow-2xl">
+              <h3 className="text-lg font-bold">Submit your work</h3>
+              <label className="block cursor-pointer rounded-xl border border-dashed border-[#0000FF] p-4 text-center text-sm hover:bg-blue-50">
+                <span className="font-medium text-[#0000FF]">Attach files</span> (up to 50 MB each)
+                <input type="file" multiple className="hidden"
+                  onChange={(e) => setSubFiles(Array.from(e.target.files ?? []))} />
+              </label>
+              {subFiles.length > 0 && (
+                <ul className="space-y-1 text-sm text-gray-700">
+                  {subFiles.map((f) => (
+                    <li key={f.name + f.size}>📄 {f.name} ({(f.size / 1048576).toFixed(1)} MB)</li>
+                  ))}
+                </ul>
+              )}
+              <input
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 outline-none focus:border-[#0000FF]"
+                placeholder="Or a link (Google Drive, Frame.io, etc.)"
+                type="url" value={subUrl}
+                onChange={(e) => setSubUrl(e.target.value)} />
+              <textarea
+                className="w-full rounded-xl border border-gray-300 px-3 py-2 outline-none focus:border-[#0000FF]"
+                placeholder="Notes for the admin (optional)"
+                value={subNotes} onChange={(e) => setSubNotes(e.target.value)} />
+              <p className="text-xs text-gray-500">
+                Attached files are deleted automatically 7 days after you submit.
+              </p>
+              {subErr && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{subErr}</p>}
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={uploading} onClick={() => setSubmitId(null)}
+                  className="rounded-full border border-black px-4 py-1.5">Cancel</button>
+                <button disabled={uploading}
+                  className="rounded-full bg-[#0000FF] px-5 py-1.5 text-white hover:bg-black disabled:opacity-60">
+                  {uploading ? "Uploading…" : "Submit"}
                 </button>
               </div>
             </form>
