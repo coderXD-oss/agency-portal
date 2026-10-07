@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import TaskComments from "@/components/TaskComments";
 import SubmissionFiles from "@/components/SubmissionFiles";
+import EarningsReport from "@/components/EarningsReport";
 import { ROLES } from "@/lib/types";
 import type { Profile, Task } from "@/lib/types";
 
@@ -17,7 +18,7 @@ export default function Admin() {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [emps, setEmps] = useState<Profile[]>([]);
-  const [payouts, setPayouts] = useState<{ employee_id: string; amount: number }[]>([]);
+  const [payouts, setPayouts] = useState<{ employee_id: string; amount: number; paid_at: string }[]>([]);
   const [f, setF] = useState(empty);
   const [adminId, setAdminId] = useState("");
   const [commentTask, setCommentTask] = useState<Task | null>(null);
@@ -29,7 +30,7 @@ export default function Admin() {
   const load = useCallback(async () => {
     const t = await supabase.from("tasks").select("*").order("created_at", { ascending: false });
     const e = await supabase.from("profiles").select("*").eq("is_admin", false);
-    const p = await supabase.from("payouts").select("employee_id,amount");
+    const p = await supabase.from("payouts").select("employee_id,amount,paid_at");
     setTasks((t.data as Task[]) ?? []);
     setEmps((e.data as Profile[]) ?? []);
     setPayouts(p.data ?? []);
@@ -229,6 +230,8 @@ export default function Admin() {
             </div>
           ))}
         </section>
+
+        <EarningsReport tasks={tasks} emps={emps} payouts={payouts} />
 
         {/* ALL TASKS */}
         <section>

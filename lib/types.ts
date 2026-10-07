@@ -13,6 +13,7 @@ export type Task = {
   submission_notes: string | null;
   admin_feedback: string | null;
   created_at: string;
+  approved_at: string | null;
 };
 
 export type Profile = {
