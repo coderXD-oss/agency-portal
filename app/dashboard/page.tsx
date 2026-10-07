@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import TaskComments from "@/components/TaskComments";
@@ -141,11 +142,19 @@ export default function Dashboard() {
       <header className="bg-black px-6 py-4">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
           <h1 className="text-xl font-bold text-white">Hi {name} 👋</h1>
-          <button
-            className="rounded-full bg-[#0000FF] px-4 py-1.5 text-sm text-white hover:bg-white hover:text-black"
-            onClick={async () => { await supabase.auth.signOut(); router.replace("/login"); }}>
-            Log out
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard/earnings"
+              className="rounded-full border border-white px-4 py-1.5 text-sm text-white hover:bg-white hover:text-black"
+            >
+              My earnings
+            </Link>
+            <button
+              className="rounded-full bg-[#0000FF] px-4 py-1.5 text-sm text-white hover:bg-white hover:text-black"
+              onClick={async () => { await supabase.auth.signOut(); router.replace("/login"); }}>
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 

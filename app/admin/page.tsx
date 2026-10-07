@@ -24,6 +24,11 @@ export default function Admin() {
   const [emps, setEmps] = useState<Profile[]>([]);
   const [payouts, setPayouts] = useState<{ employee_id: string; amount: number; paid_at: string }[]>([]);
   const [f, setF] = useState(empty);
+  const [q, setQ] = useState("");
+  const [statusF, setStatusF] = useState("");
+  const [empF, setEmpF] = useState("");
+  const [sortBy, setSortBy] = useState("newest");
+  const [nowMs, setNowMs] = useState(0);
   const [adminId, setAdminId] = useState("");
   const [commentTask, setCommentTask] = useState<Task | null>(null);
   const [rejectId, setRejectId] = useState<string | null>(null);
@@ -39,6 +44,11 @@ export default function Admin() {
     setTasks((t.data as Task[]) ?? []);
     setEmps((e.data as Profile[]) ?? []);
     setPayouts(p.data ?? []);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setNowMs(Date.now()), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -193,6 +203,21 @@ export default function Admin() {
     "w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-black outline-none focus:border-[#0000FF] focus:ring-2 focus:ring-[#0000FF]/20";
   const card = "rounded-2xl bg-white p-5 shadow";
   const submitted = tasks.filter((t) => t.status === "submitted");
+  const shown = tasks
+    .filter((t) => {
+      const text = `${t.title} ${t.description ?? ""} ${name(t.assigned_to)}`.toLowerCase();
+      return (
+        text.includes(q.trim().toLowerCase()) &&
+        (!statusF || t.status === statusF) &&
+        (!empF || (empF === "none" ? !t.assigned_to : t.assigned_to === empF))
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === "deadline") return (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999");
+      if (sortBy === "price") return Number(b.price) - Number(a.price);
+      return b.created_at.localeCompare(a.created_at);
+    });
+  const filtersOn = q || statusF || empF || sortBy !== "newest";
 
   return (
     <main className="min-h-screen bg-gray-100 text-black">
@@ -286,7 +311,44 @@ export default function Admin() {
 
         {/* ALL TASKS */}
         <section>
-          <h2 className="mb-3 text-xl font-semibold">All tasks</h2>
+          <h2 className="mb-3 text-xl font-semibold">
+            All tasks <span className="text-sm font-normal text-gray-500">({shown.length} of {tasks.length})</span>
+          </h2>
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <input
+              className={`${input} lg:col-span-2`}
+              placeholder="Search title, description or employee…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <select className={input} value={statusF} onChange={(e) => setStatusF(e.target.value)}>
+              <option value="">All statuses</option>
+              <option value="open">Open</option>
+              <option value="taken">Taken</option>
+              <option value="in_progress">In progress</option>
+              <option value="submitted">Submitted</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <select className={input} value={empF} onChange={(e) => setEmpF(e.target.value)}>
+              <option value="">All employees</option>
+              <option value="none">Unassigned</option>
+              {emps.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+            </select>
+            <select className={input} value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              <option value="newest">Newest first</option>
+              <option value="deadline">Deadline soonest</option>
+              <option value="price">Highest price</option>
+            </select>
+          </div>
+          {filtersOn && (
+            <button
+              className="mb-3 text-sm text-[#0000FF] underline"
+              onClick={() => { setQ(""); setStatusF(""); setEmpF(""); setSortBy("newest"); }}
+            >
+              Clear filters
+            </button>
+          )}
           <div className="overflow-x-auto rounded-2xl bg-white shadow">
             <table className="w-full text-sm">
               <thead>
@@ -296,13 +358,20 @@ export default function Admin() {
                 </tr>
               </thead>
               <tbody>
-                {tasks.map((t) => (
+                {shown.map((t) => (
                   <tr key={t.id} className="border-b">
                     <td className="p-3">{t.title}</td>
                     <td>{Number(t.price).toLocaleString()}</td>
                     <td className="font-medium uppercase text-[#0000FF]">{t.status.replace("_", " ")}</td>
                     <td>{name(t.assigned_to)}</td>
-                    <td>{t.deadline ? new Date(t.deadline).toLocaleDateString() : "—"}</td>
+                    <td className={
+                      nowMs > 0 && t.deadline && new Date(t.deadline).getTime() < nowMs &&
+                      !["submitted", "approved"].includes(t.status)
+                        ? "font-semibold text-red-600" : ""}>
+                      {t.deadline ? new Date(t.deadline).toLocaleDateString() : "—"}
+                      {nowMs > 0 && t.deadline && new Date(t.deadline).getTime() < nowMs &&
+                        !["submitted", "approved"].includes(t.status) ? " ⚠ overdue" : ""}
+                    </td>
                     <td className="whitespace-nowrap pr-3">
                       {t.assigned_to && (
                         <button className="mr-3 text-[#0000FF]" onClick={() => setCommentTask(t)}>Comments</button>
@@ -314,6 +383,7 @@ export default function Admin() {
               </tbody>
             </table>
           </div>
+          {shown.length === 0 && <p className="mt-3 text-gray-500">No tasks match these filters.</p>}
         </section>
 
         {/* EMPLOYEES + EARNINGS */}
