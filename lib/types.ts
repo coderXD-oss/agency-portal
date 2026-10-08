@@ -14,6 +14,10 @@ export type Task = {
   admin_feedback: string | null;
   created_at: string;
   approved_at: string | null;
+  task_type: string | null;
+  priority: "low" | "medium" | "high" | "urgent";
+  client_name: string | null;
+  client_notes: string | null;
 };
 
 export type Profile = {
@@ -31,5 +35,17 @@ export const ROLES = [
   "Content Writer",
   "Social Media Manager",
   "Digital Marketer",
+  "Other",
+];
+
+export const TASK_TYPES = [
+  "Social media post",
+  "Flyer / poster",
+  "Logo / branding",
+  "Video editing",
+  "Reel / short video",
+  "Caption / copywriting",
+  "Ad campaign",
+  "Website",
   "Other",
 ];

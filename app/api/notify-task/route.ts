@@ -56,6 +56,7 @@ export async function POST(req: Request) {
     <h2 style="margin:0 0 12px">${esc(task.title)}</h2>
     <p style="font-size:22px;font-weight:bold;color:#0000FF;margin:0 0 12px">LKR ${Number(task.price).toLocaleString("en-US")}</p>
     <p style="margin:0 0 6px"><b>Role:</b> ${esc(task.required_role ?? "Any role")}</p>
+    <p style="margin:0 0 6px"><b>Priority:</b> ${esc(String(task.priority ?? "medium"))}</p>
     <p style="margin:0 0 12px"><b>Deadline:</b> ${esc(deadline)}</p>
     <p style="color:#374151">${esc((task.description ?? "").slice(0, 300))}</p>
     ${direct ? "" : `<p style="color:#b91c1c;font-size:13px">First come, first served. Once someone takes it, it's gone.</p>`}
