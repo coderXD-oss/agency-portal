@@ -3,10 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import ReferenceFiles from "@/components/ReferenceFiles";
 import PriorityBadge from "@/components/PriorityBadge";
 import TaskComments from "@/components/TaskComments";
 import SubmissionFiles from "@/components/SubmissionFiles";
 import EarningsReport from "@/components/EarningsReport";
+import { uploadReferences } from "@/lib/references";
 import { ROLES, TASK_TYPES } from "@/lib/types";
 import type { Profile, Task } from "@/lib/types";
 
@@ -26,6 +28,7 @@ export default function Admin() {
   const [emps, setEmps] = useState<Profile[]>([]);
   const [payouts, setPayouts] = useState<{ employee_id: string; amount: number; paid_at: string }[]>([]);
   const [f, setF] = useState(empty);
+  const [refFiles, setRefFiles] = useState<File[]>([]);
   const [q, setQ] = useState("");
   const [statusF, setStatusF] = useState("");
   const [empF, setEmpF] = useState("");
@@ -78,22 +81,39 @@ export default function Admin() {
     const { data: created, error } = await supabase.from("tasks").insert({
       title: f.title, description: f.description, requirements: f.requirements,
       price: Number(f.price), deadline: f.deadline || null,
-      required_role: f.required_role || null, mode: f.mode,
+      required_role: f.required_role || null,
       task_type: f.task_type || null,
       priority: f.priority,
       client_name: f.client_name || null,
       client_notes: f.client_notes || null,
+      mode: f.mode,
       assigned_to: direct ? f.assignee : null,
       status: direct ? "taken" : "open",
     }).select("id").single();
     if (error) return setNotice(error.message);
     setF(empty);
-    setNotice("Task published. Sending email alerts…");
     load();
 
-    // The task is already live. If the email fails, nothing is lost.
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session || !created) return;
+    let fileNote = "";
+    if (created && refFiles.length > 0) {
+      setNotice("Task published. Uploading reference files…");
+      const uploadError = await uploadReferences(created.id, refFiles);
+      fileNote = uploadError
+        ? ` Some files failed: ${uploadError}`
+        : ` ${refFiles.length} reference file(s) attached.`;
+      setRefFiles([]);
+    }
+
+    setNotice("Task published. Sending email alerts…" + fileNote);
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      setNotice(`Task published, but the email alert failed: ${sessionError.message}.${fileNote}`);
+      return;
+    }
+    if (!session || !created) {
+      setNotice(`Task published, but the email alert could not be sent: not logged in.${fileNote}`);
+      return;
+    }
     fetch("/api/notify-task", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
@@ -103,11 +123,11 @@ export default function Admin() {
       .then((r) =>
         setNotice(
           r.error
-            ? `Task published, but the emails failed: ${r.error}`
-            : `Task published. Email sent to ${r.sent} employee(s).`
+            ? `Task published, but the emails failed: ${r.error}.${fileNote}`
+            : `Task published. Email sent to ${r.sent} employee(s).${fileNote}`
         )
       )
-      .catch(() => setNotice("Task published, but the email alert failed."));
+      .catch(() => setNotice(`Task published, but the email alert failed.${fileNote}`));
   }
 
   function flash(m: string) {
@@ -308,6 +328,31 @@ export default function Admin() {
               value={f.client_name} onChange={(e) => setF({ ...f, client_name: e.target.value })} />
             <textarea className={input} placeholder="Client notes (brand colours, tone, do's and don'ts)"
               value={f.client_notes} onChange={(e) => setF({ ...f, client_notes: e.target.value })} />
+            <div className="md:col-span-2">
+              <label className="block cursor-pointer rounded-xl border border-dashed border-[#0000FF] p-3 text-center text-sm hover:bg-blue-50">
+                <span className="font-medium text-[#0000FF]">Attach reference files</span>{" "}
+                (logos, photos, briefs; up to 50 MB each)
+                <input type="file" multiple className="hidden"
+                  onChange={(event) => {
+                    const picked = Array.from(event.target.files ?? []);
+                    event.target.value = "";
+                    setRefFiles((current) => [...current, ...picked]);
+                  }} />
+              </label>
+              {refFiles.length > 0 && (
+                <ul className="mt-2 space-y-1 text-sm">
+                  {refFiles.map((file, i) => (
+                    <li key={`${file.name}-${i}`} className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-1">
+                      <span>📎 {file.name} ({(file.size / 1048576).toFixed(1)} MB)</span>
+                      <button type="button" className="text-xs text-red-600 underline"
+                        onClick={() => setRefFiles((current) => current.filter((_, j) => j !== i))}>
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <input className={input} type="datetime-local" value={f.deadline}
               onChange={(e) => setF({ ...f, deadline: e.target.value })} />
             <select className={input} value={f.required_role}
@@ -460,6 +505,10 @@ export default function Admin() {
                         {t.task_type && <span className="text-xs text-gray-500">{t.task_type}</span>}
                         {t.client_name && <span className="text-xs text-gray-500">· {t.client_name}</span>}
                       </div>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-xs text-[#0000FF]">📎 Files</summary>
+                        <div className="mt-1"><ReferenceFiles taskId={t.id} canEdit /></div>
+                      </details>
                     </td>
                     <td className="font-medium text-slate-700">{Number(t.price).toLocaleString()}</td>
                     <td><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold capitalize text-blue-700">{t.status.replace("_", " ")}</span></td>

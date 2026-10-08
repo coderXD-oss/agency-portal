@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import ReferenceFiles from "@/components/ReferenceFiles";
 import PriorityBadge from "@/components/PriorityBadge";
 import TaskComments from "@/components/TaskComments";
 import type { Task } from "@/lib/types";
@@ -302,6 +303,7 @@ export default function Dashboard() {
             )}
             {mine.map((t) => (
               <TaskCard key={t.id} t={t}>
+                <ReferenceFiles taskId={t.id} canEdit={false} />
                 {t.status === "taken" && (
                   <button onClick={() => start(t.id)}
                     className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#0000FF] hover:text-[#0000FF]">
